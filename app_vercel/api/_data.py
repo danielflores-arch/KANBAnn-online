@@ -10,7 +10,10 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from typing import Dict, List, Any, Optional
 
-from storage import get_all_priorities
+try:
+    from _storage import get_all_priorities
+except ImportError:
+    from storage import get_all_priorities
 
 logger = logging.getLogger("vercel-data")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -22,6 +25,18 @@ GOOGLE_SHEET_CSV_URL = os.environ.get(
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CATALOG_FILE = os.path.join(BASE_DIR, "product_catalog.json")
+CACHE_BACKUP_FILE = os.path.join(BASE_DIR, "cached_data.json")
+
+
+def load_backup_cache() -> Dict[str, Any]:
+    """Carga los datos de respaldo local si Google Sheets aún no está disponible."""
+    if os.path.exists(CACHE_BACKUP_FILE):
+        try:
+            with open(CACHE_BACKUP_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"No se pudo leer cached_data.json de respaldo: {e}")
+    return {"records": [], "sectors": [], "source": "empty", "last_updated": None}
 
 # Normalizaciones comunes de caracteres dañados por codificaciones (Latin-1/UTF-8/Windows-1252)
 CHAR_REPLACEMENTS = {
@@ -137,7 +152,20 @@ def fetch_kanban_data(force_remote: bool = False) -> Dict[str, Any]:
         if _DATA_CACHE is not None:
             logger.info("Sirviendo datos desde caché previa debido a fallo de red con Google Sheets.")
             return _DATA_CACHE
-        raise
+        backup = load_backup_cache()
+        if backup.get("records"):
+            logger.info("Sirviendo datos desde archivo de respaldo cached_data.json.")
+            _DATA_CACHE = backup
+            return backup
+        return {
+            "records": [],
+            "sectors": [],
+            "priorities_map": priorities,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "source": "waiting_data_provider",
+            "total_count": 0,
+            "warning": "Proveedor de datos aún no conectado o en línea."
+        }
 
     reader = csv.DictReader(io.StringIO(csv_text))
     records: List[Dict[str, Any]] = []

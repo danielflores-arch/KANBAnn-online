@@ -5,7 +5,10 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from typing import Dict, Any, List
 
-from storage import get_all_priorities, save_priorities, get_all_logs, append_audit_log
+try:
+    from _storage import get_all_priorities, save_priorities, get_all_logs, append_audit_log
+except ImportError:
+    from storage import get_all_priorities, save_priorities, get_all_logs, append_audit_log
 
 # Lista de emails permitidos de PCP (configurable vía ENV)
 # Admite comodines (ej. *@sai.com.ar) o emails específicos
