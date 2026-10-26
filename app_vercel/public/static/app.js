@@ -237,6 +237,18 @@ function handleGoogleCredentialResponse(response) {
   }
 }
 
+// Validador de regla de negocio: fecha de emisión como máximo del año pasado (descarta 2022 y anteriores)
+function isValidEmissionYear(fechaStr) {
+  if (!fechaStr) return true;
+  const match = String(fechaStr).match(/\b(19\d{2}|20\d{2})\b/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const minYear = new Date().getFullYear() - 1;
+    return year >= minYear;
+  }
+  return true;
+}
+
 // Cargar datos principales desde la API de Vercel
 async function loadData() {
   try {
@@ -244,8 +256,12 @@ async function loadData() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    state.records = data.records || [];
-    state.sectors = data.sectors || [];
+    const rawRecords = data.records || [];
+    state.records = rawRecords.filter((r) => isValidEmissionYear(r.fecha_emision));
+
+    // Si había sectores en los datos originales, asegurar que conservamos los sectores activos válidos
+    const activeSectors = Array.from(new Set(state.records.map((r) => r.lugar_actual).filter(Boolean)));
+    state.sectors = activeSectors.length > 0 ? activeSectors : (data.sectors || []);
     state.lastUpdated = data.last_updated;
 
     if (data.priorities_map) {

@@ -89,6 +89,35 @@ def parse_number(val: Any) -> float:
         return 0.0
 
 
+def parse_emission_year(date_str: Any) -> Optional[int]:
+    """Extrae el año de la fecha de emisión en múltiples formatos (DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, etc.)."""
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    match_4 = re.search(r'\b(19\d{2}|20\d{2})\b', s)
+    if match_4:
+        return int(match_4.group(1))
+    for fmt in ("%d/%m/%y", "%d-%m-%y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(s, fmt).year
+        except ValueError:
+            pass
+    return None
+
+
+def is_valid_emission_date(date_str: Any, min_year: Optional[int] = None) -> bool:
+    """
+    Verifica que la fecha de emisión sea como máximo del año pasado.
+    Descarta lotes antiguos (ej: 2022 si el año actual es 2026).
+    """
+    if min_year is None:
+        min_year = datetime.now().year - 1
+    year = parse_emission_year(date_str)
+    if year is not None and year < min_year:
+        return False
+    return True
+
+
 def normalize_col_name(col: str) -> str:
     """Normaliza un nombre de columna a minúsculas y sin acentos ni signos raros."""
     s = clean_text(col).lower()
@@ -222,11 +251,14 @@ def parse_totvs_export(
         if not of_val:
             continue
 
+        fecha_emision = clean_text(row.get(col_fecha_emision)) if col_fecha_emision else ""
+        # REGLA: La fecha de emisión debe ser como máximo del año pasado (descarta 2022 y años anteriores)
+        if not is_valid_emission_date(fecha_emision):
+            continue
+
         estado = clean_text(row.get(col_estado)) if col_estado else "PENDIENTE"
         if not estado:
             estado = "PENDIENTE"
-
-        fecha_emision = clean_text(row.get(col_fecha_emision)) if col_fecha_emision else ""
         producto = clean_text(row.get(col_producto)) if col_producto else ""
         fecha_apunte = clean_text(row.get(col_fecha_apunte)) if col_fecha_apunte else ""
         operacion = clean_text(row.get(col_operacion)) if col_operacion else ""

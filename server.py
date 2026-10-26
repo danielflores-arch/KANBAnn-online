@@ -71,6 +71,30 @@ def parse_num(val: Any) -> float:
     except ValueError:
         return 0.0
 
+def parse_emission_year(date_str: Any) -> Optional[int]:
+    """Extrae el año de la fecha de emisión en múltiples formatos."""
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    match_4 = re.search(r'\b(19\d{2}|20\d{2})\b', s)
+    if match_4:
+        return int(match_4.group(1))
+    for fmt in ("%d/%m/%y", "%d-%m-%y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(s, fmt).year
+        except ValueError:
+            pass
+    return None
+
+def is_valid_emission_date(date_str: Any, min_year: Optional[int] = None) -> bool:
+    """Verifica que la fecha de emisión sea como máximo del año pasado."""
+    if min_year is None:
+        min_year = datetime.now().year - 1
+    year = parse_emission_year(date_str)
+    if year is not None and year < min_year:
+        return False
+    return True
+
 CATALOG_FILE = os.path.join(os.path.dirname(__file__), "product_catalog.json")
 CATALOG_SHEET_URL = (
     "https://docs.google.com/spreadsheets/d/1U4LtXEf3WE2Uu3U6V0dhBlsI4iINwUdPITRpXx90qg8/export?format=csv&gid=1379261464"
@@ -136,6 +160,11 @@ def fetch_and_parse_sheet() -> Dict[str, Any]:
             try:
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
                     cached = json.load(f)
+                    if isinstance(cached, dict) and "records" in cached:
+                        cached["records"] = [
+                            r for r in cached["records"]
+                            if is_valid_emission_date(r.get("fecha_emision"))
+                        ]
                     current_data = cached
                     current_data["source"] = "offline_cache"
                     return current_data
@@ -158,8 +187,12 @@ def fetch_and_parse_sheet() -> Dict[str, Any]:
         if not of:
             continue
 
-        estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
         fecha_emision = clean_str(row.get("FECHA EMISION OF", ""))
+        # Regla: fecha de emisión como máximo del año pasado
+        if not is_valid_emission_date(fecha_emision):
+            continue
+
+        estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
         producto = clean_str(row.get("PRODUCTO", ""))
         fecha_apunte = clean_str(row.get("FECHA DE APUNTE", ""))
         operacion = clean_str(row.get("OPERACION", ""))

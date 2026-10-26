@@ -55,14 +55,29 @@ function initSectorFromUrl() {
 }
 
 // Cargar datos silenciosamente desde la API local (alimentada por scripts del sistema)
+// Validador de regla de negocio: fecha de emisión como máximo del año pasado
+function isValidEmissionYear(fechaStr) {
+  if (!fechaStr) return true;
+  const match = String(fechaStr).match(/\b(19\d{2}|20\d{2})\b/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const minYear = new Date().getFullYear() - 1;
+    return year >= minYear;
+  }
+  return true;
+}
+
 async function loadData() {
   try {
     const res = await fetch("/api/data");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    state.records = data.records || [];
-    state.sectors = data.sectors || [];
+    const rawRecords = data.records || [];
+    state.records = rawRecords.filter((r) => isValidEmissionYear(r.fecha_emision));
+
+    const activeSectors = Array.from(new Set(state.records.map((r) => r.lugar_actual).filter(Boolean)));
+    state.sectors = activeSectors.length > 0 ? activeSectors : (data.sectors || []);
     state.lastUpdated = data.last_updated;
 
     if (!state.sectors.includes(state.selectedSector) && state.sectors.length > 0) {

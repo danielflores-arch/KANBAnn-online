@@ -102,6 +102,32 @@ def parse_num(val: Any) -> float:
         return 0.0
 
 
+def parse_emission_year(date_str: Any) -> Optional[int]:
+    """Extrae el año de la fecha de emisión en múltiples formatos."""
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    match_4 = re.search(r'\b(19\d{2}|20\d{2})\b', s)
+    if match_4:
+        return int(match_4.group(1))
+    for fmt in ("%d/%m/%y", "%d-%m-%y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(s, fmt).year
+        except ValueError:
+            pass
+    return None
+
+
+def is_valid_emission_date(date_str: Any, min_year: Optional[int] = None) -> bool:
+    """Verifica que la fecha de emisión sea como máximo del año pasado."""
+    if min_year is None:
+        min_year = datetime.now().year - 1
+    year = parse_emission_year(date_str)
+    if year is not None and year < min_year:
+        return False
+    return True
+
+
 def load_catalog() -> Dict[str, str]:
     """Carga el catálogo en memoria y solo vuelve a leer el disco si el archivo fue modificado."""
     global _CATALOG_CACHE, _CATALOG_MTIME
@@ -132,6 +158,10 @@ def load_local_cache() -> Optional[Dict[str, Any]]:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             if data.get("records"):
+                data["records"] = [
+                    r for r in data["records"]
+                    if is_valid_emission_date(r.get("fecha_emision"))
+                ]
                 _LOCAL_CACHE_MEM = data
                 _LOCAL_CACHE_MTIME = mtime
                 return _LOCAL_CACHE_MEM
@@ -169,8 +199,12 @@ def fetch_and_parse_sheets() -> Dict[str, Any]:
         if not of_val:
             continue
 
-        estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
         fecha_emision = clean_str(row.get("FECHA EMISION OF", ""))
+        # Regla: fecha de emisión como máximo del año pasado
+        if not is_valid_emission_date(fecha_emision):
+            continue
+
+        estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
         producto = clean_str(row.get("PRODUCTO", ""))
         fecha_apunte = clean_str(row.get("FECHA DE APUNTE", ""))
         operacion = clean_str(row.get("OPERACION", ""))
