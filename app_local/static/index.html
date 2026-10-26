@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Digital TV - SAI Planta</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E%3Ctext y=%2226%22 font-size=%2228%22>📺</text></svg>">
+</head>
+<body>
+
+  <!-- TV TOP BAR (ENCABEZADO GIGANTE) -->
+  <header class="tv-header">
+    <div class="tv-brand-block">
+      <div class="tv-logo-sai">SAI</div>
+      <div class="tv-sector-title-wrap">
+        <div class="tv-sector-title">
+          <span id="tvSectorName">SECTOR: LIMPIEZA DEMET</span>
+          <span class="tv-sector-badge" id="tvSectorBadge">Piloto</span>
+        </div>
+        <div class="tv-sector-sub" id="tvSectorSub">
+          Visualizador de Órdenes de Fabricación en Línea
+        </div>
+      </div>
+    </div>
+
+    <!-- METRICS PILLS PARA TELEVISOR -->
+    <div class="tv-metrics-bar">
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricOrders" style="color: var(--accent-cyan);">0</span>
+        <span class="tv-metric-lbl">Órdenes (OF)</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricPlanned">0</span>
+        <span class="tv-metric-lbl">Planificadas</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricProduced" style="color: var(--accent-green);">0</span>
+        <span class="tv-metric-lbl">Producidas</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricScrap" style="color: var(--accent-rose);">0</span>
+        <span class="tv-metric-lbl">Scrap</span>
+      </div>
+    </div>
+
+    <!-- RELOJ TELEVISOR -->
+    <div class="tv-status-block">
+      <div class="tv-clock" id="tvClock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- CONTROLES & TABS DE SECTOR -->
+  <nav class="tv-nav-strip">
+    <div class="tv-sector-tabs" id="tvSectorTabs">
+      <!-- Inyectado por JavaScript -->
+    </div>
+
+    <div class="tv-mode-buttons">
+      <button class="tv-action-btn" id="btnFullscreen">
+        <span>⛶</span> Pantalla Completa
+      </button>
+    </div>
+  </nav>
+
+  <!-- TV STAGE (TABLERO MURO DE TARJETAS PARA TELEVISOR) -->
+  <main class="tv-stage" id="tvStage">
+    <!-- Todas las tarjetas del sector se inyectan en vista Muro -->
+  </main>
+
+  <!-- TV FOOTER BAR -->
+  <footer class="tv-bottom-bar">
+    <div style="font-weight: 700; color: #cbd5e1;">
+      📺 Modo Tablero de Sector Industrial
+    </div>
+    <div style="font-family: var(--font-mono); font-size: 13px;">
+      Atajos: [F] Pantalla Completa
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script src="/static/vendor/qrcode.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

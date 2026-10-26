@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Digital TV - SAI Planta (Nube)</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E%3Ctext y=%2226%22 font-size=%2228%22>📺</text></svg>">
+  <!-- Google Identity Services (Sign-In con Gmail / Google) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- TV TOP BAR (ENCABEZADO GIGANTE) -->
+  <header class="tv-header">
+    <div class="tv-brand-block">
+      <div class="tv-logo-sai">SAI</div>
+      <div class="tv-sector-title-wrap">
+        <div class="tv-sector-title">
+          <span id="tvSectorName">SECTOR: LIMPIEZA DEMET</span>
+          <span class="tv-sector-badge" id="tvSectorBadge">Piloto</span>
+        </div>
+        <div class="tv-sector-sub" id="tvSectorSub">
+          Visualizador de Órdenes de Fabricación en Línea
+        </div>
+      </div>
+    </div>
+
+    <!-- METRICS PILLS PARA TELEVISOR -->
+    <div class="tv-metrics-bar">
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricOrders" style="color: var(--accent-cyan);">0</span>
+        <span class="tv-metric-lbl">Órdenes (OF)</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricPlanned">0</span>
+        <span class="tv-metric-lbl">Planificadas</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricProduced" style="color: var(--accent-green);">0</span>
+        <span class="tv-metric-lbl">Producidas</span>
+      </div>
+      <div class="tv-metric-pill">
+        <span class="tv-metric-val" id="tvMetricScrap" style="color: var(--accent-rose);">0</span>
+        <span class="tv-metric-lbl">Scrap</span>
+      </div>
+      <div class="tv-metric-pill" id="pillHighPriority" style="border-color: #ef4444;">
+        <span class="tv-metric-val" id="tvMetricPriority" style="color: #ef4444;">0</span>
+        <span class="tv-metric-lbl">Prioridad Alta</span>
+      </div>
+    </div>
+
+    <!-- RELOJ TELEVISOR -->
+    <div class="tv-status-block">
+      <div class="tv-clock" id="tvClock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- CONTROLES & TABS DE SECTOR -->
+  <nav class="tv-nav-strip">
+    <div class="tv-sector-tabs" id="tvSectorTabs">
+      <!-- Inyectado por JavaScript -->
+    </div>
+
+    <div class="tv-mode-buttons">
+      <!-- BOTÓN VER LOGS PCP (VISIBLE PARA PCP) -->
+      <button class="tv-action-btn" id="btnOpenLogs" title="Ver historial de prioridades asignadas por PCP">
+        <span>📋</span> Logs PCP
+      </button>
+
+      <!-- ÁREA DE AUTENTICACIÓN GOOGLE / PCP -->
+      <div id="pcpAuthArea">
+        <button class="tv-action-btn pcp-login-btn" id="btnLoginPcp">
+          <svg width="14" height="14" viewBox="0 0 24 24" style="margin-right: 4px;">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          Acceso PCP
+        </button>
+      </div>
+
+      <button class="tv-action-btn" id="btnFullscreen">
+        <span>⛶</span> Pantalla Completa
+      </button>
+    </div>
+  </nav>
+
+  <!-- TV STAGE (TABLERO MURO DE TARJETAS PARA TELEVISOR) -->
+  <main class="tv-stage" id="tvStage">
+    <!-- Todas las tarjetas del sector se inyectan en vista Muro -->
+  </main>
+
+  <!-- TV FOOTER BAR -->
+  <footer class="tv-bottom-bar">
+    <div style="font-weight: 700; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+      <span>📺 Kanban Digital Vercel</span>
+      <span style="color: #64748b;">•</span>
+      <span style="color: #94a3b8; font-size: 12px;">Las órdenes con <strong>Prioridad Alta</strong> se ubican automáticamente al inicio (arriba a la izquierda).</span>
+    </div>
+    <div style="font-family: var(--font-mono); font-size: 13px;">
+      Atajos: [F] Pantalla Completa
+    </div>
+  </footer>
+
+  <!-- ============================================================
+       MODAL 1: LOGIN PCP (GMAIL / GOOGLE)
+       ============================================================ -->
+  <div class="modal-backdrop" id="modalLogin" style="display: none;">
+    <div class="modal-box modal-login-box">
+      <div class="modal-header">
+        <h3>🔐 Acceso PCP - Control de Prioridades</h3>
+        <button class="modal-close-btn" id="btnCloseLogin">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+          Inicia sesión con tu cuenta de <strong>Gmail o Google Workspace</strong> autorizada de PCP para poder asignar o quitar la <strong>Prioridad Alta</strong> a las órdenes de fabricación.
+        </p>
+
+        <!-- Contenedor Oficial Google Sign-In Button -->
+        <div id="googleSignInButtonWrap" style="display: flex; justify-content: center; margin-bottom: 20px;">
+          <!-- Google Identity Services injects button here -->
+        </div>
+
+        <div class="modal-divider"><span>O ingreso rápido con correo autorizado</span></div>
+
+        <!-- Formulario alternativo de correo -->
+        <form id="formManualEmail" style="display: flex; flex-direction: column; gap: 10px;">
+          <label style="font-size: 12px; color: #cbd5e1; font-weight: bold;">Correo de Gmail / Google:</label>
+          <input type="email" id="inputPcpEmail" class="modal-input" placeholder="ejemplo@sai.com.ar o tunombre@gmail.com" required>
+          <label style="font-size: 12px; color: #cbd5e1; font-weight: bold;">Nombre del Responsable:</label>
+          <input type="text" id="inputPcpName" class="modal-input" placeholder="Nombre y Apellido" required>
+          
+          <button type="submit" class="modal-btn modal-btn-primary" style="margin-top: 6px;">
+            Validar Acceso PCP
+          </button>
+        </form>
+
+        <div id="loginFeedback" style="margin-top: 12px; font-size: 12px; text-align: center; display: none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MODAL 2: GESTIÓN DE PRIORIDAD DE UNA OF
+       ============================================================ -->
+  <div class="modal-backdrop" id="modalPriority" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>⚡ Asignar Prioridad a Orden de Fabricación</h3>
+        <button class="modal-close-btn" id="btnClosePriority">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-of-summary">
+          <div><span class="summary-lbl">Lote / OF:</span> <strong id="mPriorityOf" class="summary-val-of">--</strong></div>
+          <div><span class="summary-lbl">Pieza:</span> <span id="mPriorityPieza">--</span></div>
+          <div><span class="summary-lbl">Denominación:</span> <span id="mPriorityDenom">--</span></div>
+          <div><span class="summary-lbl">Sector Actual:</span> <span id="mPrioritySector">--</span></div>
+        </div>
+
+        <div style="margin: 20px 0;">
+          <label style="font-size: 13px; font-weight: bold; color: #cbd5e1; display: block; margin-bottom: 8px;">
+            Selecciona la prioridad deseada:
+          </label>
+          <div class="priority-choice-group">
+            <label class="priority-choice-card choice-alta">
+              <input type="radio" name="optPriority" value="ALTA" id="radioAlta">
+              <div class="choice-content">
+                <span class="choice-title">🔴 PRIORIDAD ALTA</span>
+                <span class="choice-desc">Muestra cartel rojo destacado y ubica la orden arriba a la izquierda del tablero en planta.</span>
+              </div>
+            </label>
+            <label class="priority-choice-card choice-normal">
+              <input type="radio" name="optPriority" value="NORMAL" id="radioNormal">
+              <div class="choice-content">
+                <span class="choice-title">⚪ NORMAL (Sin prioridad especial)</span>
+                <span class="choice-desc">La orden queda en su ordenación natural y sin cartel superior.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div id="priorityAuthorInfo" style="font-size: 12px; color: #94a3b8; padding: 8px; background: rgba(0,0,0,0.25); border-radius: 6px; display: none;">
+          <!-- Información del último cambio -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-secondary" id="btnCancelPriority">Cancelar</button>
+        <button class="modal-btn modal-btn-primary" id="btnSavePriority">Guardar Prioridad</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MODAL 3: AUDITORÍA Y LOGS PCP
+       ============================================================ -->
+  <div class="modal-backdrop" id="modalLogs" style="display: none;">
+    <div class="modal-box modal-box-large">
+      <div class="modal-header">
+        <h3>📋 Historial de Auditoría PCP - Prioridades Asignadas</h3>
+        <button class="modal-close-btn" id="btnCloseLogs">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 10px;">
+        <div class="logs-toolbar">
+          <input type="text" id="inputSearchLogs" class="modal-input" placeholder="🔍 Buscar por OF, denominación o correo..." style="max-width: 380px;">
+          <span style="color: #94a3b8; font-size: 12px;" id="lblLogsCount">Cargando registros...</span>
+        </div>
+
+        <div class="logs-table-wrap">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>OF / Lote</th>
+                <th>Denominación</th>
+                <th>Sector</th>
+                <th>Cambio de Estado</th>
+                <th>Usuario PCP Responsable</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <!-- Filas inyectadas por JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-secondary" id="btnCloseLogsFooter">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="/static/vendor/qrcode.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
