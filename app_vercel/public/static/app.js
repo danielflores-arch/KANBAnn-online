@@ -13,6 +13,10 @@ const state = {
   googleClientId: "",
   activeOfRecord: null, // Registro actualmente editado en el modal de prioridad
   autoRefreshIntervalSec: 10,
+  currentPage: 1,
+  pageSize: 24, // Límite por pantalla para máxima fluidez y legibilidad industrial
+  autoRotatePages: true,
+  pageRotateSec: 25,
 };
 
 // Referencias DOM
@@ -32,6 +36,10 @@ const dom = {
   btnLoginPcp: document.getElementById("btnLoginPcp"),
   pcpAuthArea: document.getElementById("pcpAuthArea"),
   stage: document.getElementById("tvStage"),
+  paginationWrap: document.getElementById("tvPaginationControls"),
+  btnPrevPage: document.getElementById("btnPrevPage"),
+  btnNextPage: document.getElementById("btnNextPage"),
+  pageIndicator: document.getElementById("tvPageIndicator"),
 
   // Modales
   modalLogin: document.getElementById("modalLogin"),
@@ -70,6 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadData();
   fetchPriorityConfig();
   startAutoRefreshTimer();
+  startPageRotationTimer();
 });
 
 // Reloj digital TV
@@ -249,19 +258,37 @@ function isValidEmissionYear(fechaStr) {
   return true;
 }
 
+// Filtro de órdenes activas (excluye órdenes finalizadas para no sobrecargar el tablero)
+function isRecordActive(r) {
+  if (!r) return false;
+  if (!isValidEmissionYear(r.fecha_emision)) return false;
+  const estado = String(r.estado || "").toUpperCase();
+  if (estado.includes("FINALIZAD")) return false;
+  const sector = String(r.lugar_actual || "").toLowerCase();
+  if (sector === "finalizado") return false;
+  return true;
+}
+
 // Cargar datos principales desde la API de Vercel
 async function loadData() {
   try {
-    const res = await fetch("/api/data");
+    const url = state.selectedSector
+      ? `/api/data?sector=${encodeURIComponent(state.selectedSector)}`
+      : `/api/data`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
     const rawRecords = data.records || [];
-    state.records = rawRecords.filter((r) => isValidEmissionYear(r.fecha_emision));
+    state.records = rawRecords.filter(isRecordActive);
 
-    // Si había sectores en los datos originales, asegurar que conservamos los sectores activos válidos
-    const activeSectors = Array.from(new Set(state.records.map((r) => r.lugar_actual).filter(Boolean)));
-    state.sectors = activeSectors.length > 0 ? activeSectors : (data.sectors || []);
+    if (data.sectors && data.sectors.length > 0) {
+      state.sectors = data.sectors;
+    } else {
+      const activeSectors = Array.from(new Set(state.records.map((r) => r.lugar_actual).filter(Boolean)));
+      state.sectors = activeSectors.length > 0 ? activeSectors : (data.sectors || []);
+    }
+    state.totalInSector = data.total_in_sector !== undefined ? data.total_in_sector : state.records.length;
     state.lastUpdated = data.last_updated;
 
     if (data.priorities_map) {
@@ -286,6 +313,19 @@ function startAutoRefreshTimer() {
   }, state.autoRefreshIntervalSec * 1000);
 }
 
+// Rotación automática de páginas para televisor industrial
+function startPageRotationTimer() {
+  setInterval(() => {
+    if (!state.autoRotatePages) return;
+    const sectorRecords = state.records.filter((r) => r.lugar_actual === state.selectedSector);
+    const totalPages = Math.max(1, Math.ceil(sectorRecords.length / state.pageSize));
+    if (totalPages > 1) {
+      state.currentPage = (state.currentPage % totalPages) + 1;
+      renderStage();
+    }
+  }, state.pageRotateSec * 1000);
+}
+
 // Renderizar pastillas de sectores
 function renderSectorTabs() {
   dom.sectorTabs.innerHTML = "";
@@ -301,12 +341,13 @@ function renderSectorTabs() {
 
     btn.addEventListener("click", () => {
       state.selectedSector = sec;
+      state.currentPage = 1;
       const url = new URL(window.location);
       url.searchParams.set("sector", sec);
       window.history.pushState({}, "", url);
 
       renderSectorTabs();
-      renderStage();
+      loadData();
     });
 
     dom.sectorTabs.appendChild(btn);
@@ -342,7 +383,14 @@ function renderStage() {
     return 0; // Conserva el orden natural
   });
 
-  const total = sortedRecords.length;
+  const total = state.totalInSector !== undefined ? state.totalInSector : sortedRecords.length;
+  const currentTotal = sortedRecords.length;
+  const totalPages = Math.max(1, Math.ceil(currentTotal / state.pageSize));
+  if (state.currentPage > totalPages) state.currentPage = 1;
+
+  const startIndex = (state.currentPage - 1) * state.pageSize;
+  const visibleRecords = sortedRecords.slice(startIndex, startIndex + state.pageSize);
+  const displayCount = visibleRecords.length;
 
   dom.sectorName.textContent = `SECTOR: ${state.selectedSector}`;
   if (state.selectedSector === "LIMPIEZA DEMET") {
@@ -352,7 +400,21 @@ function renderStage() {
     dom.sectorBadge.textContent = "Sector Planta";
   }
 
-  dom.sectorSub.textContent = `Mostrando ${total} órdenes en este sector`;
+  dom.sectorSub.textContent = totalPages > 1
+    ? `Mostrando ${displayCount} de ${total} órdenes activas (Página ${state.currentPage} de ${totalPages})`
+    : `Mostrando ${total} órdenes activas en este sector`;
+
+  // Control visual del paginador
+  if (dom.paginationWrap) {
+    if (totalPages > 1) {
+      dom.paginationWrap.style.display = "inline-flex";
+      if (dom.pageIndicator) {
+        dom.pageIndicator.textContent = `${state.currentPage} / ${totalPages}`;
+      }
+    } else {
+      dom.paginationWrap.style.display = "none";
+    }
+  }
 
   // Métricas
   const totalPlanned = sortedRecords.reduce((sum, r) => sum + (r.planificado || 0), 0);
@@ -370,11 +432,11 @@ function renderStage() {
 
   dom.stage.innerHTML = "";
 
-  if (total === 0) {
+  if (displayCount === 0) {
     dom.stage.innerHTML = `
       <div class="tv-empty-box">
-        <h2>No hay órdenes en este sector</h2>
-        <p>En este momento no hay tarjetas registradas para <strong>${escapeHtml(state.selectedSector)}</strong>.</p>
+        <h2>No hay órdenes activas en este sector</h2>
+        <p>En este momento no hay tarjetas pendientes para <strong>${escapeHtml(state.selectedSector)}</strong>.</p>
       </div>
     `;
     return;
@@ -388,9 +450,9 @@ function renderStage() {
   const h0 = 380;
   let best = null;
 
-  for (let C = 1; C <= total; C++) {
-    const R = Math.ceil(total / C);
-    const gap = total <= 4 ? 14 : (total <= 12 ? 10 : 6);
+  for (let C = 1; C <= displayCount; C++) {
+    const R = Math.ceil(displayCount / C);
+    const gap = displayCount <= 4 ? 14 : (displayCount <= 12 ? 10 : 6);
     const wAvail = stageW - (C - 1) * gap;
     const hAvail = stageH - (R - 1) * gap;
 
@@ -399,7 +461,7 @@ function renderStage() {
     const sW = wAvail / (C * w0);
     const sH = hAvail / (R * h0);
     let scale = Math.min(sW, sH);
-    scale = Math.min(1.25, Math.max(0.18, scale));
+    scale = Math.min(1.25, Math.max(0.20, scale));
 
     if (!best || scale > best.scale) {
       best = {
@@ -414,7 +476,7 @@ function renderStage() {
   }
 
   if (!best) {
-    best = { cols: 4, rows: Math.ceil(total / 4), scale: 0.7, cardW: 238, cardH: 266, gap: 8 };
+    best = { cols: 4, rows: Math.ceil(displayCount / 4), scale: 0.7, cardW: 238, cardH: 266, gap: 8 };
   }
 
   const gridWrap = document.createElement("div");
@@ -423,7 +485,7 @@ function renderStage() {
   gridWrap.style.gridTemplateRows = `repeat(${best.rows}, ${best.cardH}px)`;
   gridWrap.style.gap = `${best.gap}px`;
 
-  sortedRecords.forEach((record, idx) => {
+  visibleRecords.forEach((record, idx) => {
     const slot = document.createElement("div");
     slot.className = "tv-card-slot";
     slot.style.width = `${best.cardW}px`;
@@ -433,7 +495,7 @@ function renderStage() {
     scaler.className = "tv-card-scaler";
     scaler.style.transform = `scale(${best.scale})`;
 
-    const cardEl = createTvCardElement(record, `qr_tv_${idx}`);
+    const cardEl = createTvCardElement(record, `qr_tv_${startIndex + idx}`);
     scaler.appendChild(cardEl);
     slot.appendChild(scaler);
     gridWrap.appendChild(slot);
@@ -441,9 +503,9 @@ function renderStage() {
 
   dom.stage.appendChild(gridWrap);
 
-  // Generar códigos QR limpios
-  sortedRecords.forEach((record, idx) => {
-    generateOfQrCode(`qr_tv_${idx}`, record.of, 105);
+  // Generar códigos QR limpios SOLO para las tarjetas visibles en pantalla (máxima velocidad)
+  visibleRecords.forEach((record, idx) => {
+    generateOfQrCode(`qr_tv_${startIndex + idx}`, record.of, 105);
   });
 }
 
@@ -814,6 +876,18 @@ function setupEventListeners() {
   dom.btnCloseLogsFooter?.addEventListener("click", () => closeModal(dom.modalLogs));
   dom.inputSearchLogs?.addEventListener("input", (e) => {
     renderLogsTable(e.target.value);
+  });
+
+  // Paginación TV
+  dom.btnPrevPage?.addEventListener("click", () => {
+    state.currentPage = Math.max(1, state.currentPage - 1);
+    renderStage();
+  });
+  dom.btnNextPage?.addEventListener("click", () => {
+    const sectorRecords = state.records.filter((r) => r.lugar_actual === state.selectedSector);
+    const totalPages = Math.max(1, Math.ceil(sectorRecords.length / state.pageSize));
+    state.currentPage = (state.currentPage % totalPages) + 1;
+    renderStage();
   });
 
   // Teclado

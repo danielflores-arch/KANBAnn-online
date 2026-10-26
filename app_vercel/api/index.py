@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # Asegurar que el directorio api/ esté en el path de importación
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,7 +66,9 @@ class handler(BaseHTTPRequestHandler):
 
         # Endpoint 2: /api/data (y fallback por defecto para /api)
         try:
-            data = fetch_kanban_data()
+            query = parse_qs(parsed.query)
+            requested_sector = query.get("sector", [None])[0]
+            data = fetch_kanban_data(requested_sector=requested_sector)
             self._send_json(200, data, {
                 "Cache-Control": "public, s-maxage=5, stale-while-revalidate=15"
             })

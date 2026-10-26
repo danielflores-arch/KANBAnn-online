@@ -259,6 +259,16 @@ def parse_totvs_export(
         estado = clean_text(row.get(col_estado)) if col_estado else "PENDIENTE"
         if not estado:
             estado = "PENDIENTE"
+        # REGLA: Excluir órdenes finalizadas (Kanban solo muestra producción activa)
+        if "FINALIZAD" in estado.upper():
+            continue
+
+        lugar_actual = clean_text(row.get(col_lugar)) if col_lugar else "SIN SECTOR"
+        if not lugar_actual:
+            lugar_actual = "SIN SECTOR"
+        if lugar_actual.lower() == "finalizado":
+            continue
+
         producto = clean_text(row.get(col_producto)) if col_producto else ""
         fecha_apunte = clean_text(row.get(col_fecha_apunte)) if col_fecha_apunte else ""
         operacion = clean_text(row.get(col_operacion)) if col_operacion else ""
@@ -269,10 +279,6 @@ def parse_totvs_export(
         planificado = parse_number(row.get(col_planificado)) if col_planificado else 0.0
         producido = parse_number(row.get(col_producido)) if col_producido else 0.0
         scrap = parse_number(row.get(col_scrap)) if col_scrap else 0.0
-
-        lugar_actual = clean_text(row.get(col_lugar)) if col_lugar else "SIN SECTOR"
-        if not lugar_actual:
-            lugar_actual = "SIN SECTOR"
 
         prox_lugar = clean_text(row.get(col_prox)) if col_prox else ""
 

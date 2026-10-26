@@ -277,29 +277,33 @@ def get_all_priorities(force_refresh: bool = False) -> Dict[str, Any]:
     global _memory_priorities, _priorities_cache_time
     now = time.time()
 
-    if not force_refresh and _memory_priorities and (now - _priorities_cache_time) < CACHE_TTL_SECONDS:
-        return _memory_priorities
+    if not force_refresh and (now - _priorities_cache_time) < CACHE_TTL_SECONDS:
+        _priorities_cache_time = now
+    return _memory_priorities
 
     # 1. Google Apps Script Webhook
     wh_data = _gsheets_webhook_get()
     if wh_data and "priorities" in wh_data:
         _memory_priorities = wh_data["priorities"]
         _priorities_cache_time = now
-        return _memory_priorities
+        _priorities_cache_time = now
+    return _memory_priorities
 
     # 2. Google Sheets Service Account
     gspread_data = _gspread_read_priorities()
     if gspread_data is not None:
         _memory_priorities = gspread_data
         _priorities_cache_time = now
-        return _memory_priorities
+        _priorities_cache_time = now
+    return _memory_priorities
 
     # 3. Google Sheets CSV
     csv_data = _gsheets_csv_read_priorities()
     if csv_data is not None:
         _memory_priorities = csv_data
         _priorities_cache_time = now
-        return _memory_priorities
+        _priorities_cache_time = now
+    return _memory_priorities
 
     # 4. Vercel KV / Upstash Redis
     if KV_URL and KV_TOKEN:
@@ -326,6 +330,7 @@ def get_all_priorities(force_refresh: bool = False) -> Dict[str, Any]:
         except Exception:
             pass
 
+    _priorities_cache_time = now
     return _memory_priorities
 
 
@@ -367,15 +372,17 @@ def get_all_logs(force_refresh: bool = False) -> List[Dict[str, Any]]:
     global _memory_logs, _logs_cache_time
     now = time.time()
 
-    if not force_refresh and _memory_logs and (now - _logs_cache_time) < CACHE_TTL_SECONDS:
-        return _memory_logs
+    if not force_refresh and (now - _logs_cache_time) < CACHE_TTL_SECONDS:
+        _logs_cache_time = now
+    return _memory_logs
 
     # 1. Google Apps Script Webhook
     wh_data = _gsheets_webhook_get()
     if wh_data and "logs" in wh_data and isinstance(wh_data["logs"], list):
         _memory_logs = wh_data["logs"]
         _logs_cache_time = now
-        return _memory_logs
+        _logs_cache_time = now
+    return _memory_logs
 
     # 2. Vercel KV
     if KV_URL and KV_TOKEN:
@@ -402,6 +409,7 @@ def get_all_logs(force_refresh: bool = False) -> List[Dict[str, Any]]:
         except Exception:
             pass
 
+    _logs_cache_time = now
     return _memory_logs
 
 

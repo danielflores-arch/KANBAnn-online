@@ -63,6 +63,13 @@
     </div>
 
     <div class="tv-mode-buttons">
+      <!-- CONTROL DE PÁGINAS TV (AUTO-AJUSTE PARA RENDIMIENTO) -->
+      <div id="tvPaginationControls" class="tv-pagination-wrap" style="display: none; align-items: center; gap: 6px; background: rgba(15,23,42,0.6); padding: 2px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+        <button class="tv-action-btn" id="btnPrevPage" style="padding: 4px 10px; font-weight: bold;" title="Página anterior">◀</button>
+        <span id="tvPageIndicator" style="font-size: 12px; font-weight: 700; color: #38bdf8; min-width: 75px; text-align: center;">1 / 1</span>
+        <button class="tv-action-btn" id="btnNextPage" style="padding: 4px 10px; font-weight: bold;" title="Página siguiente">▶</button>
+      </div>
+
       <!-- BOTÓN VER LOGS PCP (VISIBLE PARA PCP) -->
       <button class="tv-action-btn" id="btnOpenLogs" title="Ver historial de prioridades asignadas por PCP">
         <span>📋</span> Logs PCP

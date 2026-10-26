@@ -161,6 +161,8 @@ def load_local_cache() -> Optional[Dict[str, Any]]:
                 data["records"] = [
                     r for r in data["records"]
                     if is_valid_emission_date(r.get("fecha_emision"))
+                    and "FINALIZAD" not in str(r.get("estado", "")).upper()
+                    and str(r.get("lugar_actual", "")).lower() != "finalizado"
                 ]
                 _LOCAL_CACHE_MEM = data
                 _LOCAL_CACHE_MTIME = mtime
@@ -205,6 +207,14 @@ def fetch_and_parse_sheets() -> Dict[str, Any]:
             continue
 
         estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
+        # Regla: Excluir órdenes finalizadas
+        if "FINALIZAD" in estado:
+            continue
+
+        lugar_actual = clean_str(row.get("LUGAR ACTUAL", "SIN SECTOR"))
+        if lugar_actual.lower() == "finalizado":
+            continue
+
         producto = clean_str(row.get("PRODUCTO", ""))
         fecha_apunte = clean_str(row.get("FECHA DE APUNTE", ""))
         operacion = clean_str(row.get("OPERACION", ""))
@@ -214,7 +224,6 @@ def fetch_and_parse_sheets() -> Dict[str, Any]:
         planificado = parse_num(row.get("PLANIFICADO", 0))
         producido = parse_num(row.get("PRODUCIDO", 0))
         scrap = parse_num(row.get("SCRAP", 0))
-        lugar_actual = clean_str(row.get("LUGAR ACTUAL", "SIN SECTOR"))
         prox = clean_str(row.get("PRÓXIMO LUGAR") or row.get("PRXIMO LUGAR") or row.get("PROXIMO LUGAR") or "")
 
         denominacion = catalog.get(producto, "")

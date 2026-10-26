@@ -67,6 +67,8 @@ def load_backup_cache() -> Dict[str, Any]:
                     data["records"] = [
                         r for r in data["records"]
                         if is_valid_emission_date(r.get("fecha_emision"))
+                        and "FINALIZAD" not in str(r.get("estado", "")).upper()
+                        and str(r.get("lugar_actual", "")).lower() != "finalizado"
                     ]
                 return data
         except Exception as e:
@@ -108,8 +110,10 @@ _CATALOG_MTIME: float = 0.0
 
 # Caché en memoria de los datos procesados (amortigua llamadas simultáneas y previene cuelgues)
 _DATA_CACHE: Optional[Dict[str, Any]] = None
+_ALL_RECORDS_CACHE: Optional[List[Dict[str, Any]]] = None
+_ALL_SECTORS_CACHE: Optional[List[str]] = None
 _DATA_CACHE_TIME: float = 0.0
-DATA_CACHE_TTL = 5.0  # 5 segundos
+DATA_CACHE_TTL = 15.0  # 15 segundos
 
 
 def clean_str(val: Any) -> str:
@@ -152,128 +156,148 @@ def load_catalog() -> Dict[str, str]:
         return _CATALOG_CACHE or {}
 
 
-def fetch_kanban_data(force_remote: bool = False) -> Dict[str, Any]:
+def fetch_kanban_data(force_remote: bool = False, requested_sector: Optional[str] = None) -> Dict[str, Any]:
     """Descarga y normaliza los datos con caché de alta velocidad y fallback de resiliencia."""
-    global _DATA_CACHE, _DATA_CACHE_TIME
+    global _DATA_CACHE, _ALL_RECORDS_CACHE, _ALL_SECTORS_CACHE, _DATA_CACHE_TIME
     now = time.time()
-
-    # Si la caché es reciente y no se fuerza recarga, responder en <1ms
-    if not force_remote and _DATA_CACHE is not None and (now - _DATA_CACHE_TIME) < DATA_CACHE_TTL:
-        # Actualizar prioridades en memoria de forma instantánea
-        priorities = get_all_priorities()
-        records = _DATA_CACHE.get("records", [])
-        for r in records:
-            p_info = priorities.get(r["of"], {})
-            prioridad_val = p_info.get("prioridad", "NORMAL")
-            r["prioridad"] = prioridad_val
-            r["prioridad_info"] = p_info if prioridad_val == "ALTA" else None
-        records.sort(key=lambda r: (0 if r.get("prioridad") == "ALTA" else 1))
-        _DATA_CACHE["priorities_map"] = priorities
-        return _DATA_CACHE
-
-    catalog = load_catalog()
     priorities = get_all_priorities()
 
-    try:
-        req = urllib.request.Request(
-            GOOGLE_SHEET_CSV_URL,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KanbanVercel/2.0"}
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            csv_bytes = response.read()
-        csv_text = csv_bytes.decode("utf-8", errors="replace")
-    except Exception as e:
-        logger.warning(f"Error descargando de Google Sheets: {e}")
-        if _DATA_CACHE is not None:
-            logger.info("Sirviendo datos desde caché previa debido a fallo de red con Google Sheets.")
-            return _DATA_CACHE
-        backup = load_backup_cache()
-        if backup.get("records"):
-            logger.info("Sirviendo datos desde archivo de respaldo cached_data.json.")
-            _DATA_CACHE = backup
-            return backup
-        return {
-            "records": [],
-            "sectors": [],
-            "priorities_map": priorities,
-            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "source": "waiting_data_provider",
-            "total_count": 0,
-            "warning": "Proveedor de datos aún no conectado o en línea."
-        }
+    need_download = force_remote or _ALL_RECORDS_CACHE is None or (now - _DATA_CACHE_TIME) >= DATA_CACHE_TTL
 
-    reader = csv.DictReader(io.StringIO(csv_text))
-    records: List[Dict[str, Any]] = []
-    sectors_set = set()
+    if not need_download and _ALL_RECORDS_CACHE is not None:
+        all_records = _ALL_RECORDS_CACHE
+        sectors_list = _ALL_SECTORS_CACHE or []
+    else:
+        catalog = load_catalog()
+        try:
+            req = urllib.request.Request(
+                GOOGLE_SHEET_CSV_URL,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KanbanVercel/2.0"}
+            )
+            with urllib.request.urlopen(req, timeout=12) as response:
+                csv_bytes = response.read()
+            csv_text = csv_bytes.decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning(f"Error descargando de Google Sheets: {e}")
+            backup = load_backup_cache()
+            if backup.get("records"):
+                _ALL_RECORDS_CACHE = backup.get("records", [])
+                _ALL_SECTORS_CACHE = backup.get("sectors", [])
+                all_records = _ALL_RECORDS_CACHE
+                sectors_list = _ALL_SECTORS_CACHE
+            else:
+                return {
+                    "records": [],
+                    "sectors": [],
+                    "priorities_map": priorities,
+                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "source": "waiting_data_provider",
+                    "total_count": 0,
+                    "warning": "Proveedor de datos aún no conectado o en línea."
+                }
+        else:
+            reader = csv.DictReader(io.StringIO(csv_text))
+            all_records = []
+            sectors_set = set()
 
-    for idx, row in enumerate(reader):
-        of_val = clean_str(row.get("OF"))
-        if not of_val:
-            continue
+            for idx, row in enumerate(reader):
+                of_val = clean_str(row.get("OF"))
+                if not of_val:
+                    continue
 
-        fecha_emision = clean_str(row.get("FECHA EMISION OF", ""))
-        # REGLA: La fecha de emisión debe ser como máximo del año pasado (descarta 2022 y años anteriores)
-        if not is_valid_emission_date(fecha_emision):
-            continue
+                fecha_emision = clean_str(row.get("FECHA EMISION OF", ""))
+                # REGLA: La fecha de emisión debe ser como máximo del año pasado (descarta 2022 y años anteriores)
+                if not is_valid_emission_date(fecha_emision):
+                    continue
 
-        estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
-        producto = clean_str(row.get("PRODUCTO", ""))
-        fecha_apunte = clean_str(row.get("FECHA DE APUNTE", ""))
-        operacion = clean_str(row.get("OPERACION", ""))
-        descripcion = clean_str(row.get("DESCRIPCION", ""))
-        recurso = clean_str(row.get("RECURSO", ""))
-        recurso_desc = clean_str(row.get("RECURSO DESCIPCION", ""))
-        planificado = parse_num(row.get("PLANIFICADO", 0))
-        producido = parse_num(row.get("PRODUCIDO", 0))
-        scrap = parse_num(row.get("SCRAP", 0))
-        lugar_actual = clean_str(row.get("LUGAR ACTUAL", "SIN SECTOR"))
-        prox = clean_str(row.get("PRÓXIMO LUGAR") or row.get("PRXIMO LUGAR") or row.get("PROXIMO LUGAR") or "")
+                estado = clean_str(row.get("ESTADO", "PENDIENTE")).upper()
+                # REGLA: Excluir órdenes finalizadas (Kanban solo muestra producción activa en planta)
+                if "FINALIZAD" in estado:
+                    continue
 
-        denominacion = catalog.get(producto, "")
-        if not denominacion:
-            denominacion = descripcion if descripcion else (f"{recurso_desc} {producto}" if recurso_desc else producto)
+                lugar_actual = clean_str(row.get("LUGAR ACTUAL", "SIN SECTOR"))
+                if lugar_actual.lower() == "finalizado":
+                    continue
 
-        if lugar_actual:
-            sectors_set.add(lugar_actual)
+                producto = clean_str(row.get("PRODUCTO", ""))
+                fecha_apunte = clean_str(row.get("FECHA DE APUNTE", ""))
+                operacion = clean_str(row.get("OPERACION", ""))
+                descripcion = clean_str(row.get("DESCRIPCION", ""))
+                recurso = clean_str(row.get("RECURSO", ""))
+                recurso_desc = clean_str(row.get("RECURSO DESCIPCION", ""))
+                planificado = parse_num(row.get("PLANIFICADO", 0))
+                producido = parse_num(row.get("PRODUCIDO", 0))
+                scrap = parse_num(row.get("SCRAP", 0))
+                prox = clean_str(row.get("PRÓXIMO LUGAR") or row.get("PRXIMO LUGAR") or row.get("PROXIMO LUGAR") or "")
 
-        p_info = priorities.get(of_val, {})
+                denominacion = catalog.get(producto, "")
+                if not denominacion:
+                    denominacion = descripcion if descripcion else (f"{recurso_desc} {producto}" if recurso_desc else producto)
+
+                if lugar_actual:
+                    sectors_set.add(lugar_actual)
+
+                p_info = priorities.get(of_val, {})
+                prioridad_val = p_info.get("prioridad", "NORMAL")
+
+                all_records.append({
+                    "id": f"{of_val}_{operacion}_{idx}",
+                    "of": of_val,
+                    "estado": estado,
+                    "fecha_emision": fecha_emision,
+                    "producto": producto,
+                    "denominacion": denominacion,
+                    "fecha_apunte": fecha_apunte,
+                    "operacion": operacion,
+                    "descripcion": descripcion,
+                    "recurso": recurso,
+                    "recurso_descripcion": recurso_desc,
+                    "planificado": planificado,
+                    "producido": producido,
+                    "scrap": scrap,
+                    "lugar_actual": lugar_actual,
+                    "proximo_lugar": prox,
+                    "prioridad": prioridad_val,
+                    "prioridad_info": p_info if prioridad_val == "ALTA" else None,
+                })
+
+            _ALL_RECORDS_CACHE = all_records
+            _ALL_SECTORS_CACHE = sorted(list(sectors_set))
+            _DATA_CACHE_TIME = now
+            sectors_list = _ALL_SECTORS_CACHE
+
+    # Actualizar prioridades dinámicas en los registros
+    for r in all_records:
+        p_info = priorities.get(r["of"], {})
         prioridad_val = p_info.get("prioridad", "NORMAL")
+        r["prioridad"] = prioridad_val
+        r["prioridad_info"] = p_info if prioridad_val == "ALTA" else None
 
-        records.append({
-            "id": f"{of_val}_{operacion}_{idx}",
-            "of": of_val,
-            "estado": estado,
-            "fecha_emision": fecha_emision,
-            "producto": producto,
-            "denominacion": denominacion,
-            "fecha_apunte": fecha_apunte,
-            "operacion": operacion,
-            "descripcion": descripcion,
-            "recurso": recurso,
-            "recurso_descripcion": recurso_desc,
-            "planificado": planificado,
-            "producido": producido,
-            "scrap": scrap,
-            "lugar_actual": lugar_actual,
-            "proximo_lugar": prox,
-            "prioridad": prioridad_val,
-            "prioridad_info": p_info if prioridad_val == "ALTA" else None,
-        })
+    # Filtrar por sector solicitado (reduce payload de 38MB a < 100KB)
+    if requested_sector:
+        filtered = [r for r in all_records if r.get("lugar_actual") == requested_sector]
+    else:
+        filtered = all_records
 
-    # Prioridad Alta siempre arriba a la izquierda
-    records.sort(key=lambda r: (0 if r.get("prioridad") == "ALTA" else 1))
+    total_in_query = len(filtered)
+    # Ordenar: Prioridad Alta primero
+    filtered.sort(key=lambda r: (0 if r.get("prioridad") == "ALTA" else 1))
+
+    # Limitar a 150 tarjetas máximas por consulta para garantizar respuesta liviana (< 100 KB)
+    sliced_records = filtered[:150]
 
     result = {
-        "records": records,
-        "sectors": sorted(list(sectors_set)),
+        "records": sliced_records,
+        "sectors": sectors_list,
+        "selected_sector": requested_sector or (sectors_list[0] if sectors_list else ""),
+        "total_in_sector": total_in_query,
         "priorities_map": priorities,
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source": "google_sheets_live",
-        "total_count": len(records),
+        "total_count": len(all_records),
     }
 
     _DATA_CACHE = result
-    _DATA_CACHE_TIME = now
     return result
 
 
