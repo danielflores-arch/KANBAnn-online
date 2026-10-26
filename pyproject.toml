@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "app_vercel/api/index.py"
+entrypoint = "app_vercel.api.index:handler"
